@@ -11,9 +11,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-add_executable(interview-prep main.cpp)
+add_executable(interview-prep tests/main.cpp)
+target_include_directories(interview-prep PRIVATE inc)
 target_link_libraries(interview-prep PRIVATE Catch2::Catch2WithMain)
 
+list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
+include(Catch)
+catch_discover_tests(interview-prep)
 enable_testing()
 
