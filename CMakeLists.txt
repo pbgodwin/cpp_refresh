@@ -18,7 +18,6 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(interview_prep 
   tests/main.cpp
   tests/unique_buffer_tests.cpp
-  src/unique_buffer.cpp
 )
 target_include_directories(interview_prep PRIVATE inc)
 target_link_libraries(interview_prep PRIVATE Catch2::Catch2WithMain)

@@ -15,15 +15,9 @@ Why: shows RAII, move semantics, and memory hygiene in one go.
 template <typename T>
 class UniqueBuffer {
     public:
-        UniqueBuffer<T>() {
-            m_size = 0;
-            m_buffer = nullptr;
-        }
+        UniqueBuffer<T>() : m_size(0), m_buffer(nullptr) {}
 
-        UniqueBuffer<T>(size_t size) {
-            m_buffer = std::make_unique<T[]>(size);
-            m_size = size;
-        }
+        UniqueBuffer<T>(size_t size): m_size(size), m_buffer(std::make_unique<T[]>(size)) { }
         
         UniqueBuffer<T>(UniqueBuffer<T>&& src) noexcept {
             m_buffer = std::move(src.m_buffer);
