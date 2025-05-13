@@ -19,23 +19,19 @@ class UniqueBuffer {
 
         UniqueBuffer<T>(size_t size): m_size(size), m_buffer(std::make_unique<T[]>(size)) { }
         
-        UniqueBuffer<T>(UniqueBuffer<T>&& src) noexcept {
-            m_buffer = std::move(src.m_buffer);
-            m_size = src.m_size;
-            src.m_buffer = nullptr;
-            src.m_size = 0;
-        }
-
-        ~UniqueBuffer<T>() {
-            m_size = 0;
-        }
+        UniqueBuffer<T>(UniqueBuffer<T>&& src) noexcept 
+            : m_size(std::exchange(src.m_size, 0)),
+              m_buffer(std::move(src.m_buffer)) {}
 
         UniqueBuffer<T>& operator=(UniqueBuffer<T>&& src) noexcept {
-            m_buffer = std::move(src.m_buffer);            
-            m_size = src.m_size;
-            src.m_buffer = nullptr;
-            src.m_size = 0;
+            if (this != &src) {
+                m_buffer = std::move(src.m_buffer);            
+                m_size = src.m_size;
+                src.m_buffer = nullptr;
+                src.m_size = 0;
+            }
             return *this;
+        
         }
 
         // prevent copies
@@ -47,6 +43,8 @@ class UniqueBuffer {
         std::unique_ptr<T[]> m_buffer;
 
     public:
-        const size_t size() { return m_size; }
-        const T* data() { return m_buffer.get(); }
+        size_t size() noexcept { return m_size; }
+        const size_t size() const noexcept { return m_size; }
+        T* data() noexcept { return m_buffer.get(); }
+        const T* data() const noexcept { return m_buffer.get(); }
 };

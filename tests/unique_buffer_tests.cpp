@@ -32,3 +32,7 @@ TEST_CASE("Move assignment leaves source null") {
     REQUIRE( m_dest.size() == 1 );
     REQUIRE_FALSE( m_dest.data() == nullptr );
 }
+
+TEST_CASE("Dtor does not allow double free") {
+    
+}
