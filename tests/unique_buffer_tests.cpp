@@ -34,5 +34,17 @@ TEST_CASE("Move assignment leaves source null") {
 }
 
 TEST_CASE("Dtor does not allow double free") {
-    
+    REQUIRE( 1 == 2);
+}
+
+TEST_CASE("array accessor throws when out of range") {
+    UniqueBuffer<int> buf(3);
+    REQUIRE_THROWS_AS(buf[3], std::out_of_range);
+}
+
+TEST_CASE("Const usaeg") {
+    const UniqueBuffer<int> cbuf(2);
+    auto s = cbuf.size();      // should compile
+    REQUIRE( s == 2 );
+    // cbuf[0] = 1;               // should fail to compile
 }

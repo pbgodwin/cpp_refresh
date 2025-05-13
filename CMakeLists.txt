@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(interview_prep VERSION 0.1.0 LANGUAGES C CXX)
 
-set(CLANG_COVERAGE_LINK_FLAGS    "--coverage")
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CLANG_COVERAGE_LINK_FLAGS}" )
+# set(CLANG_COVERAGE_LINK_FLAGS    "--coverage")
+# set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CLANG_COVERAGE_LINK_FLAGS}" )
 
 Include(FetchContent)
 
@@ -32,8 +32,11 @@ endif()
 set(CMAKE_BUILD_TYPE "Debug")
 
 # compile with coverage options
-target_compile_options(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
-target_link_libraries(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+# target_compile_options(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+# target_link_libraries(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+
+add_compile_options(interview_prep PRIVATE -fsanitize=address)
+add_link_options(interview_prep PRIVATE -fsanitize=address)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
