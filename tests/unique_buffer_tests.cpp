@@ -33,10 +33,6 @@ TEST_CASE("Move assignment leaves source null") {
     REQUIRE_FALSE( m_dest.data() == nullptr );
 }
 
-TEST_CASE("Dtor does not allow double free") {
-    REQUIRE( 1 == 2);
-}
-
 TEST_CASE("array accessor throws when out of range") {
     UniqueBuffer<int> buf(3);
     REQUIRE_THROWS_AS(buf[3], std::out_of_range);

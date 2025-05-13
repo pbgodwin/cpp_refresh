@@ -33,8 +33,14 @@ class UniqueBuffer {
             return *this;
         }
 
-        T operator[](int index) {
-            return index < m_size ? m_buffer[index] : throw std::out_of_range("index out of range for buffer");
+        T& operator[](size_t i) {
+            if (i >= m_size) throw std::out_of_range("index out of range for buffer");
+            return m_buffer[i];
+        }
+
+        const T& operator[](size_t index) const {
+            if (i >= m_size) throw std::out_of_range("index out of range for buffer");
+            return &m_buffer[i];
         }
 
         // prevent copies
