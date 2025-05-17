@@ -261,6 +261,7 @@ TEST_CASE("ArenaAllocator: Edge Cases", "[arena_allocator]") {
     }
 }
 
+// TODO, if time allows
 // Consider adding tests for:
 // - What if total_size for ArenaAllocator is 0?
 // - Allocating an object whose alignment requirement is not a power of two (though rare, how does your math handle it?)
