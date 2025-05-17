@@ -18,6 +18,7 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(interview_prep 
   tests/main.cpp
   tests/unique_buffer_tests.cpp
+  tests/arena_allocator_tests.cpp
 )
 target_include_directories(interview_prep PRIVATE inc)
 target_link_libraries(interview_prep PRIVATE Catch2::Catch2WithMain)
@@ -36,6 +37,7 @@ set(CMAKE_BUILD_TYPE "Debug")
 # target_link_libraries(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 
 add_compile_options(interview_prep PRIVATE -fsanitize=address)
+target_compile_features(interview_prep PRIVATE cxx_std_17)
 add_link_options(interview_prep PRIVATE -fsanitize=address)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
