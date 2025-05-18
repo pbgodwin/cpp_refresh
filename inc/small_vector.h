@@ -47,7 +47,6 @@ class SmallVector {
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
-            // this seems busted
             return *this;
         }
 
@@ -56,7 +55,9 @@ class SmallVector {
         }
 
         ~SmallVector<T, N>() {
-            // clean up the heap allocated nonsense!
+            for (const T* it = begin(); it != end(); it++) {
+                it->~T();
+            }
         }
 
         T& operator[](size_t index) {
@@ -76,7 +77,7 @@ class SmallVector {
         }
 
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
-            return *this;
+            throw std::out_of_range("");
         }
 
         T* begin() { 
