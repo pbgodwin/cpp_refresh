@@ -47,11 +47,32 @@ class SmallVector {
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
+            if (src.m_on_stack) {
+                std::move(src.begin(), src.end(), m_storage.stack);
+                m_on_stack = false;
+            } else {
+                m_storage.heap_data_ptr = std::move(src.m_storage.heap_data_ptr);
+                m_on_stack = true;
+            }
+
+            for (const T* it = src.begin(); it != src.end(); it++) {
+                it->~T();
+            }
+
+            m_size = src.m_size;
+            m_capacity = src.m_capacity;
             return *this;
         }
 
         SmallVector<T, N>(const SmallVector<T, N>& copy) {
-            throw std::out_of_range("");
+            if (copy.m_on_stack) {
+                std::copy(copy.m_storage.stack, (copy.m_storage.stack + copy.m_size), m_storage.stack);
+            } else {
+                m_storage.heap_data_ptr = new T[copy.m_capacity];
+                for (int i = 0; i < copy.m_size; i++) {
+                    new (m_storage.heap_data_ptr + i) T(copy[i]);
+                }
+            }
         }
 
         ~SmallVector<T, N>() {
@@ -68,8 +89,13 @@ class SmallVector {
             return get_element(index);
         }
 
+        SmallVector<T, N>& operator=(const SmallVector<T, N>&& src) {
+            return *this;
+        }
+
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
-            throw std::out_of_range("");
+
+            return *this;
         }
 
         T* begin() { 
@@ -79,6 +105,7 @@ class SmallVector {
                 return m_storage.heap_data_ptr;
             }
         }
+
         T* end() { 
             if (m_on_stack) {
                 return &(m_storage.stack[m_size]);

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(interview_prep VERSION 0.1.0 LANGUAGES C CXX)
 
+option(ENABLE_ASAN "Build with AddressSanitizer" ON)
+
 # set(CLANG_COVERAGE_LINK_FLAGS    "--coverage")
 # set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CLANG_COVERAGE_LINK_FLAGS}" )
 
@@ -37,13 +39,26 @@ set(CMAKE_BUILD_TYPE "Debug")
 # target_compile_options(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 # target_link_libraries(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 
-add_compile_options(interview_prep PRIVATE -fsanitize=address)
 target_compile_features(interview_prep PRIVATE cxx_std_17)
-add_link_options(interview_prep PRIVATE -fsanitize=address)
+
+if (ENABLE_ASAN)
+    # GCC and Clang (Linux/macOS)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_compile_options(-O1 -g
+                            -fsanitize=address,undefined
+                            -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+
+    # MSVC 19.28+ or Clang-CL (Windows)
+    elseif (MSVC)
+        message("moo")
+        add_compile_options(/fsanitize=address /Zi)
+        add_link_options(/fsanitize=address)
+    endif()
+endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
 catch_discover_tests(interview_prep)
 enable_testing()
-
