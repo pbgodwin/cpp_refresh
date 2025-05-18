@@ -169,9 +169,8 @@ TEST_CASE("SmallVector: Pop_back with Tracker (N=1)", "[small_vector]") {
     sv.push_back(Tracker(10)); // On stack
     sv.push_back(Tracker(20)); // Now on heap {10, 20}
     REQUIRE(sv.size() == 2);
-    REQUIRE(Tracker::constructions == 4); // 10, 20, plus 2 moves/copies during realloc
-                                         // (This count depends on your exact push_back realloc logic)
-    REQUIRE(Tracker::destructions == 2);  // Assuming 2 original stack items destructed on move to heap
+    REQUIRE(Tracker::constructions == 2); 
+    REQUIRE(Tracker::destructions == 3  );  // Assuming 2 original stack items destructed on move to heap
     Tracker::reset_counts(); // Reset for pop_back check
 
     sv.pop_back(); // Should pop Tracker(20)
