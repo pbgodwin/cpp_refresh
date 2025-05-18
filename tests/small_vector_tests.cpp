@@ -163,6 +163,28 @@ TEST_CASE("SmallVector: Pop_back operations (int, N=2)", "[small_vector]") {
     REQUIRE_THROWS_AS(sv.pop_back(), std::out_of_range); // Pop from empty
 }
 
+TEST_CASE("SmallVector: Pop_back with Tracker (N=1)", "[small_vector]") {
+    Tracker::reset_counts();
+    SmallVector<Tracker, 1> sv;
+    sv.push_back(Tracker(10)); // On stack
+    sv.push_back(Tracker(20)); // Now on heap {10, 20}
+    REQUIRE(sv.size() == 2);
+    REQUIRE(Tracker::constructions == 4); // 10, 20, plus 2 moves/copies during realloc
+                                         // (This count depends on your exact push_back realloc logic)
+    REQUIRE(Tracker::destructions == 2);  // Assuming 2 original stack items destructed on move to heap
+    Tracker::reset_counts(); // Reset for pop_back check
+
+    sv.pop_back(); // Should pop Tracker(20)
+    REQUIRE(sv.size() == 1);
+    REQUIRE(Tracker::destructions == 1); // Destructor for Tracker(20) should have been called
+    REQUIRE(sv[0].id == 10); // Check remaining element if operator[] works
+    Tracker::reset_counts();
+
+    sv.pop_back(); // Should pop Tracker(10)
+    REQUIRE(sv.size() == 0);
+    REQUIRE(Tracker::destructions == 1); // Destructor for Tracker(10)
+}
+
 TEST_CASE("SmallVector: Access and Bounds (int, N=3)", "[small_vector]") {
     SmallVector<int, 3> sv_stack = {10, 20};
     REQUIRE(sv_stack[0] == 10);

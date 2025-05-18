@@ -4,7 +4,7 @@
 template <typename T, size_t N>
 class SmallVector {
     union VectorStore {
-        T stack[N + 1];
+        T stack[N];
         T* heap_data_ptr = nullptr;
 
         VectorStore() {}
@@ -32,7 +32,7 @@ class SmallVector {
 
         SmallVector<T, N>(std::initializer_list<T> init) : 
                         m_size(init.size()), 
-                        m_capacity(m_size > N ? m_size + N : N),
+                        m_capacity(m_size > N ? m_size : N),
                         m_on_stack(m_size <= N) {
             if (m_on_stack) {
                 std::copy(init.begin(), init.end(), m_storage.stack);
@@ -79,8 +79,20 @@ class SmallVector {
             return *this;
         }
 
-        T* begin() { return nullptr; }
-        T* end() { return nullptr; }
+        T* begin() { 
+            if (m_on_stack) {
+                return &(m_storage.stack[0]);
+            } else {
+                return m_storage.heap_data_ptr;
+            }
+        }
+        T* end() { 
+            if (m_on_stack) {
+                return &(m_storage.stack[m_size]);
+            } else {
+                return (m_storage.heap_data_ptr + m_size);
+            }
+        }
 
     private:
         size_t m_size;
@@ -144,9 +156,20 @@ class SmallVector {
             m_size++;
         }
 
-        T pop_back() {
-            T ret = {};
-            return ret;
+        void pop_back() {
+            if (m_size == 0) { 
+                throw std::out_of_range("vector already empty");
+            }
+
+            if (m_on_stack) {
+                T val = std::move_if_noexcept(m_storage.stack[m_size]);
+                val.~T();
+            } else {
+                T val = std::move_if_noexcept(m_storage.heap_data_ptr[m_size]);
+                val.~T();
+            }
+
+            --m_size;
         }
 
         size_t size() noexcept { return m_size; }
