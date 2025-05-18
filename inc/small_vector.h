@@ -34,7 +34,16 @@ class SmallVector {
                         m_size(init.size()), 
                         m_capacity(m_size > N ? m_size + N : N),
                         m_on_stack(m_size <= N) {
-                        
+            if (m_on_stack) {
+                std::copy(init.begin(), init.end(), m_storage.stack);
+            } else {
+                m_storage.heap_data_ptr = new T[m_capacity];
+                std::copy(init.begin(), init.end(), m_storage.heap_data_ptr);
+            }
+
+            for (const T& og : init) {
+                og.~T();
+            }
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
