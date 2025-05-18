@@ -141,7 +141,7 @@ class SmallVector {
                     m_capacity = new_capacity;
                 }
             }
-            m_capacity++;
+            m_size++;
         }
 
         T pop_back() {
