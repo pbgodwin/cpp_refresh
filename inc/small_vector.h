@@ -104,7 +104,7 @@ class SmallVector {
         T at(size_t index) { return T(); }
         const T at(size_t index) const { return T(); }
 
-        void push_back(T element) {
+        void push_back(const T&& element) {
             if (m_on_stack) {
                 if (m_size < N) { // still on the stack
                     // construct the stack element in the buffer
