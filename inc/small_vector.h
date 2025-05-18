@@ -177,5 +177,9 @@ class SmallVector {
 
         bool on_stack() noexcept { return m_on_stack; }
         bool empty() noexcept { return m_size == 0; }
-        void clear() noexcept { } 
+        void clear() noexcept {
+            while (!empty()) {
+                pop_back();
+            }
+         } 
 };
