@@ -162,11 +162,9 @@ class SmallVector {
             }
 
             if (m_on_stack) {
-                T val = std::move_if_noexcept(m_storage.stack[m_size]);
-                val.~T();
+                m_storage.stack[m_size].~T();
             } else {
-                T val = std::move_if_noexcept(m_storage.heap_data_ptr[m_size]);
-                val.~T();
+                m_storage.heap_data_ptr[m_size].~T();
             }
 
             --m_size;
