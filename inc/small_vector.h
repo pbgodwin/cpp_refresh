@@ -4,39 +4,46 @@
 template <typename T, size_t N>
 class SmallVector {
     union VectorStore {
-        T stack[N];
-        UniqueBuffer<T> heap_buffer;
+        T stack[N + 1];
+        T* heap_data_ptr = nullptr;
 
         VectorStore() {}
         ~VectorStore() {}
     };
 
     public:
-        SmallVector<T, N>() : m_size(0), m_capacity(N) {}
-        SmallVector<T, N>(size_t size) : 
-                            m_size(size), 
-                            m_capacity(m_size > N ? m_size + N : N) {}
+        SmallVector<T, N>() : m_size(0), m_capacity(N), m_on_stack(true) {}
+        SmallVector<T, N>(size_t size) : SmallVector<T, N>(size, 0) { }
 
         SmallVector<T, N>(size_t size, T default_value) : 
                             m_size(size), 
-                            m_capacity(m_size > N ? m_size + N : N) {
-            for (int i = 0; i < size; i++) {
-                push_back(default_value);
+                            m_capacity(m_size > N ? m_size + N : N), 
+                            m_on_stack(m_size <= N) {
+            if (m_on_stack) {
+                for (int i = 0; i < m_size; i++) {
+                    m_storage.stack[i] = T(default_value);
+                }
+            } else {
+                m_storage.heap_data_ptr = new T[m_capacity] { default_value };
             }
+            
+            default_value.~T();
         }
 
         SmallVector<T, N>(std::initializer_list<T> init) : 
                         m_size(init.size()), 
-                        m_capacity(m_size > N ? m_size + N : N) {
-            
+                        m_capacity(m_size > N ? m_size + N : N),
+                        m_on_stack(m_size <= N) {
+                        
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
+            // this seems busted
             return *this;
         }
 
         SmallVector<T, N>(const SmallVector<T, N>& copy) {
-
+            throw std::out_of_range("");
         }
 
         ~SmallVector<T, N>() {
@@ -44,13 +51,19 @@ class SmallVector {
         }
 
         T& operator[](size_t index) {
-            if (index > m_capacity) throw std::out_of_range("index out of range for vector");
-            return m_storage.stack[index];
+            if (m_on_stack) {
+                return m_storage.stack[index];
+            } else {
+                return m_storage.heap_data_ptr[index];
+            }
         }
 
         const T& operator[](size_t index) const {
-            if (index > m_capacity) throw std::out_of_range("index out of range for vector");
-            return m_storage.stack[index];
+            if (m_on_stack) {
+                return m_storage.stack[index];
+            } else {
+                return m_storage.heap_data_ptr[index];
+            }
         }
 
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
@@ -63,6 +76,7 @@ class SmallVector {
     private:
         size_t m_size;
         size_t m_capacity;
+        bool m_on_stack;
         VectorStore m_storage;
 
     public:
@@ -70,13 +84,55 @@ class SmallVector {
         const T at(size_t index) const { return T(); }
 
         void push_back(T element) {
-            if (m_size < N) {
-                m_storage.stack[m_size] = element;
-            } else {
-                // todo: we need resize on UniqueBuffer
-                m_storage.heap_buffer[m_size] = element;
+            if (m_on_stack) {
+                if (m_size < N) { // still on the stack
+                    // construct the stack element in the buffer
+                    new (m_storage.stack + m_size) T(element);
+                } else { // if we've exhausted stack space, it's time to grow onto the heap
+                    size_t new_capacity = (N == 0) ? 1 : N * 2;
+                    
+                    // allocate raw memory for the new capacity
+                    T* new_heap_buffer = reinterpret_cast<T*>(new std::byte[new_capacity * sizeof(T)]);
+
+                    // 2. Move elements from the stack to the new heap buffer
+                    for (size_t i = 0; i < m_size; ++i) {
+                        new (new_heap_buffer + i) T(std::move_if_noexcept(m_storage.stack[i]));
+                        (m_storage.stack + i)->~T();
+                    }
+                    
+                    // finally, place the element
+                    new (new_heap_buffer + m_size) T(element);
+
+                    // Update internal state
+                    m_storage.heap_data_ptr = new_heap_buffer;
+                    m_on_stack = false;
+                    m_capacity = new_capacity;
+                }
+            } else { // already on heap
+                if (m_size < m_capacity) {
+                    new (m_storage.heap_data_ptr + m_size) T(element);
+                } else { // Heap is full, grow the space
+                     size_t new_capacity = (N == 0) ? 1 : N * 2;
+                    
+                    // allocate raw memory for the new capacity
+                    T* new_heap_buffer = reinterpret_cast<T*>(new std::byte[new_capacity * sizeof(T)]);
+
+                    // 2. Move elements from the stack to the new heap buffer
+                    for (size_t i = 0; i < m_size; ++i) {
+                        new (new_heap_buffer + i) T(std::move_if_noexcept(m_storage.stack[i]));
+                        (m_storage.stack + i)->~T();
+                    }
+                    
+                    // finally, place the element
+                    new (new_heap_buffer + m_size) T(element);
+
+                    // Update internal state
+                    m_storage.heap_data_ptr = new_heap_buffer;
+                    m_on_stack = false;
+                    m_capacity = new_capacity;
+                }
             }
-            m_size++;   
+            m_capacity++;
         }
 
         T pop_back() {
@@ -89,7 +145,7 @@ class SmallVector {
         size_t  capacity() noexcept { return m_capacity; }
         const size_t capacity() const noexcept { return m_capacity; }
 
-        bool on_stack() noexcept { return false; }
+        bool on_stack() noexcept { return m_on_stack; }
         bool empty() noexcept { return m_size == 0; }
         void clear() noexcept { } 
 };
