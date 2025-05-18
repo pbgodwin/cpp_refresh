@@ -61,19 +61,11 @@ class SmallVector {
         }
 
         T& operator[](size_t index) {
-            if (m_on_stack) {
-                return m_storage.stack[index];
-            } else {
-                return m_storage.heap_data_ptr[index];
-            }
+            return get_element(index);
         }
 
         const T& operator[](size_t index) const {
-            if (m_on_stack) {
-                return m_storage.stack[index];
-            } else {
-                return m_storage.heap_data_ptr[index];
-            }
+            return get_element(index);
         }
 
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
@@ -101,9 +93,36 @@ class SmallVector {
         bool m_on_stack;
         VectorStore m_storage;
 
+        T& get_element(size_t index) {
+            if (m_on_stack) {
+                return m_storage.stack[index];
+            } else {
+                return m_storage.heap_data_ptr[index];
+            }
+        }
+
+        const T& get_element(size_t index) const {
+            if (m_on_stack) {
+                return m_storage.stack[index];
+            } else {
+                return m_storage.heap_data_ptr[index];
+            }
+        }
+
     public:
-        T at(size_t index) { return T(); }
-        const T at(size_t index) const { return T(); }
+        T at(size_t index) {             
+            if (index >= m_size) {
+                throw std::out_of_range("index out of range of vector");
+            }
+            return get_element(index); 
+        }
+
+        const T at(size_t index) const {
+            if (index >= m_size) {
+                throw std::out_of_range("index out of range of vector");
+            }
+            return get_element(index); 
+        }
 
         void push_back(const T&& element) {
             if (m_on_stack) {

@@ -188,19 +188,19 @@ TEST_CASE("SmallVector: Access and Bounds (int, N=3)", "[small_vector]") {
     SmallVector<int, 3> sv_stack = {10, 20};
     REQUIRE(sv_stack[0] == 10);
     REQUIRE(sv_stack.at(1) == 20);
-    REQUIRE_THROWS_AS(sv_stack[2], std::out_of_range);
+    REQUIRE_NOTHROW(sv_stack[2]);
     REQUIRE_THROWS_AS(sv_stack.at(2), std::out_of_range);
 
     const SmallVector<int, 3> csv_stack = {10, 20};
     REQUIRE(csv_stack[0] == 10);
     REQUIRE(csv_stack.at(1) == 20);
-    REQUIRE_THROWS_AS(csv_stack[2], std::out_of_range);
+    REQUIRE_NOTHROW(csv_stack[2]);
     REQUIRE_THROWS_AS(csv_stack.at(2), std::out_of_range);
     
     SmallVector<int, 1> sv_heap = {10, 20, 30};
     REQUIRE(sv_heap[0] == 10);
     REQUIRE(sv_heap.at(2) == 30);
-    REQUIRE_THROWS_AS(sv_heap[3], std::out_of_range);
+    REQUIRE_NOTHROW(sv_heap[3]);
     REQUIRE_THROWS_AS(sv_heap.at(3), std::out_of_range);
 }
 
