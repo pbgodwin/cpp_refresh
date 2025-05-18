@@ -73,6 +73,14 @@ class SmallVector {
                     new (m_storage.heap_data_ptr + i) T(copy[i]);
                 }
             }
+
+            for (const T* it = copy.begin(); it != copy.end(); it++) {
+                it->~T();
+            }
+
+            m_size = copy.m_size;
+            m_capacity = copy.m_capacity;
+            m_on_stack = copy.m_on_stack;
         }
 
         ~SmallVector<T, N>() {
@@ -89,12 +97,23 @@ class SmallVector {
             return get_element(index);
         }
 
-        SmallVector<T, N>& operator=(const SmallVector<T, N>&& src) {
-            return *this;
-        }
-
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
+            if (copy.m_on_stack) {
+                std::copy(copy.m_storage.stack, (copy.m_storage.stack + copy.m_size), m_storage.stack);
+            } else {
+                m_storage.heap_data_ptr = new T[copy.m_capacity];
+                for (int i = 0; i < copy.m_size; i++) {
+                    new (m_storage.heap_data_ptr + i) T(copy[i]);
+                }
+            }
 
+            for (const T* it = copy.begin(); it != copy.end(); it++) {
+                it->~T();
+            }
+
+            m_size = copy.m_size;
+            m_capacity = copy.m_capacity;
+            m_on_stack = copy.m_on_stack;
             return *this;
         }
 
@@ -106,7 +125,23 @@ class SmallVector {
             }
         }
 
+        const T* begin() const { 
+            if (m_on_stack) {
+                return &(m_storage.stack[0]);
+            } else {
+                return m_storage.heap_data_ptr;
+            }
+        }
+
         T* end() { 
+            if (m_on_stack) {
+                return &(m_storage.stack[m_size]);
+            } else {
+                return (m_storage.heap_data_ptr + m_size);
+            }
+        }
+
+        const T* end() const { 
             if (m_on_stack) {
                 return &(m_storage.stack[m_size]);
             } else {
