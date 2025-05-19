@@ -244,7 +244,7 @@ class SmallVector {
 
                     // 2. Move elements from the stack to the new heap buffer
                     for (size_t i = 0; i < m_size; ++i) {
-                        new (new_heap_buffer + i) T(std::move_if_noexcept(m_storage.stack[i]));
+                        new (new_heap_buffer + i) T(std::move_if_noexcept(m_storage.heap_data_ptr[i]));
                         (m_storage.stack + i)->~T();
                     }
                     
