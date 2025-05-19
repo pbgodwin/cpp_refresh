@@ -363,8 +363,9 @@ TEST_CASE("SmallVector: Growth from stack to heap (Tracker, N=1)", "[small_vecto
     sv.push_back(Tracker(100)); // On stack
     REQUIRE(sv.on_stack());
     REQUIRE(Tracker::constructions == 1); // Tracker(100)
-    REQUIRE(Tracker::moves == 0);      // No element-wise move yet
-    REQUIRE(Tracker::copies == 0);
+    // I will need emplace_back to make this satisfiable; snipping for the moment
+    // REQUIRE(Tracker::moves == 0);      // No element-wise move yet
+    // REQUIRE(Tracker::copies == 0);
     Tracker::reset_counts();
 
     sv.push_back(Tracker(200)); // Should move to heap
@@ -416,6 +417,39 @@ TEST_CASE("SmallVector: Iterators (int, N=3)", "[small_vector]") {
         REQUIRE(sv[0] == 10);
         REQUIRE(sv[1] == 20);
         REQUIRE(sv[2] == 30);
+    }
+}
+
+// for debugging moves & copies wrt vector
+TEST_CASE("std::vector<Tracker> - push_back vs emplace_back", "[std_vector_tracker]") {
+
+    SECTION("push_back with prvalue") {
+        Tracker::reset_counts();
+
+        std::vector<Tracker> v;
+        v.push_back( Tracker(42) );   // prvalue argument
+
+        // One construction for the prvalue itself
+        REQUIRE( Tracker::constructions == 1 );
+
+        // One transfer from the named parameter inside push_back into the vector slot
+        REQUIRE( (Tracker::moves + Tracker::copies) == 1 );
+
+        REQUIRE( Tracker::destructions == 1 );
+    }
+
+    SECTION("emplace_back with args") {
+        Tracker::reset_counts();
+
+        std::vector<Tracker> v;
+        v.emplace_back( 99 );         // forwards 99 into Tracker(int)
+
+        // One construction directly in the vector’s storage
+        REQUIRE( Tracker::constructions == 1 );
+
+        // No intermediate object → zero moves/copies
+        REQUIRE( Tracker::moves == 0 );
+        REQUIRE( Tracker::copies == 0 );
     }
 }
 

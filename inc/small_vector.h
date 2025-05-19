@@ -209,11 +209,12 @@ class SmallVector {
             return get_element(index); 
         }
 
-        void push_back(const T&& element) {
+        template<class U = T>
+        void push_back(U&& element) {
             if (m_on_stack) {
                 if (m_size < N) { // still on the stack
                     // construct the stack element in the buffer
-                    new (m_storage.stack + m_size) T(element);
+                    new (m_storage.stack + m_size) T(std::forward<U>(element));
                 } else { // if we've exhausted stack space, it's time to grow onto the heap
                     size_t new_capacity = (N == 0) ? 1 : N * 2;
                     
