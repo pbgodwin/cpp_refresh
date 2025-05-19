@@ -1,4 +1,3 @@
-// tests/arena_allocator_tests.cpp
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef> // For std::byte, size_t
 #include <cstdint> // For uintptr_t

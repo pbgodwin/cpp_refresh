@@ -421,7 +421,7 @@ TEST_CASE("SmallVector: Iterators (int, N=3)", "[small_vector]") {
 }
 
 // for debugging moves & copies wrt vector
-TEST_CASE("std::vector<Tracker> - push_back vs emplace_back", "[std_vector_tracker]") {
+TEST_CASE("SmallVector: std::vector<Tracker> - push_back vs emplace_back", "[std_vector_tracker]") {
 
     SECTION("push_back with prvalue") {
         Tracker::reset_counts();

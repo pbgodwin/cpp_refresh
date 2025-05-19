@@ -18,6 +18,7 @@ add_executable(cpp_refresh
   tests/arena_allocator_tests.cpp
   tests/small_vector_tests.cpp
   tests/bench_small_vector.cpp
+  tests/bench_parallel_sum.cpp
 )
 target_include_directories(cpp_refresh PRIVATE inc)
 target_link_libraries(cpp_refresh PRIVATE Catch2::Catch2WithMain)
