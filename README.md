@@ -20,7 +20,7 @@ A C++ project focused on implementing and exploring various data structures and 
 ### Steps
 
 ```bash
-git clone <repository_url> # You'll need to replace this with your actual repo URL
+git clone https://github.com/pbgodwin/cpp_refresh # You'll need to replace this with your actual repo URL
 cd cpp_refresh
 cmake -B build -S .
 cmake --build build
