@@ -55,8 +55,8 @@ TEST_CASE("SmallVector: Basic Construction (int, N=3)", "[small_vector]") {
         REQUIRE(sv.size() == 2);
         REQUIRE(sv.capacity() == 3);
         REQUIRE(sv.on_stack());
-        // REQUIRE(sv[0] == 0); // Default int value
-        // REQUIRE(sv[1] == 0);
+        REQUIRE(sv[0] == 0); // Default int value
+        REQUIRE(sv[1] == 0);
     }
     
     SECTION("Constructor with size and value (all on stack)") {
