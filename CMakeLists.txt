@@ -17,6 +17,7 @@ add_executable(cpp_refresh
   tests/unique_buffer_tests.cpp
   tests/arena_allocator_tests.cpp
   tests/small_vector_tests.cpp
+  tests/bench_small_vector.cpp
 )
 target_include_directories(cpp_refresh PRIVATE inc)
 target_link_libraries(cpp_refresh PRIVATE Catch2::Catch2WithMain)
@@ -27,8 +28,6 @@ if(MSVC)
 else() # Assuming GCC/Clang or compatible
     target_compile_options(cpp_refresh PRIVATE "-Werror")
 endif()
-
-set(CMAKE_BUILD_TYPE "Debug")
 
 target_compile_features(cpp_refresh PRIVATE cxx_std_17)
 

@@ -47,12 +47,6 @@ class SmallVector {
         }
 
         SmallVector<T, N>(SmallVector<T,N>&& src) noexcept {
-            if (!empty()) {
-                for (const T* it = begin(); it != end(); ++it) {
-                    it->~T();
-                }
-            }
-
             if (src.m_on_stack) {
                 std::move(src.begin(), src.end(), m_storage.stack);
             } else {
@@ -243,7 +237,7 @@ class SmallVector {
                 if (m_size < m_capacity) {
                     new (m_storage.heap_data_ptr + m_size) T(element);
                 } else { // Heap is full, grow the space
-                     size_t new_capacity = (N == 0) ? 1 : N * 2;
+                     size_t new_capacity = (m_capacity == 0) ? 1 : m_capacity * 2;
                     
                     // allocate raw memory for the new capacity
                     T* new_heap_buffer = reinterpret_cast<T*>(new std::byte[new_capacity * sizeof(T)]);
