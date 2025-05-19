@@ -47,6 +47,10 @@ class SmallVector {
         }
 
         SmallVector<T, N>(SmallVector<T,N>&& src) noexcept {
+            for (const T* it = begin(); it != end(); ++it) {
+                it->~T();
+            }
+
             if (src.m_on_stack) {
                 std::move(src.begin(), src.end(), m_storage.stack);
             } else {
@@ -61,6 +65,10 @@ class SmallVector {
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
+            for (const T* it = begin(); it != end(); ++it) {
+                it->~T();
+            }
+            
             if (src.m_on_stack) {
                 std::move(src.begin(), src.end(), m_storage.stack);
             } else {
