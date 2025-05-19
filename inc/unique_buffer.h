@@ -1,3 +1,4 @@
+#pragma once 
 
 // Drill 1 - Unique Buffer
 // 	Modern C++ primitives — write UniqueBuffer<T> (move-only), unit-test copy elision & rule of 5
