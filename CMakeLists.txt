@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.0)
-project(interview_prep VERSION 0.1.0 LANGUAGES C CXX)
+project(cpp_refresh VERSION 0.1.0 LANGUAGES C CXX)
 
 option(ENABLE_ASAN "Build with AddressSanitizer" ON)
 
@@ -17,29 +17,29 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 
 
-add_executable(interview_prep 
+add_executable(cpp_refresh 
   tests/main.cpp
   tests/unique_buffer_tests.cpp
   tests/arena_allocator_tests.cpp
   tests/small_vector_tests.cpp
 )
-target_include_directories(interview_prep PRIVATE inc)
-target_link_libraries(interview_prep PRIVATE Catch2::Catch2WithMain)
+target_include_directories(cpp_refresh PRIVATE inc)
+target_link_libraries(cpp_refresh PRIVATE Catch2::Catch2WithMain)
 
-# Enable warnings-as-errors specifically for your interview_prep target
+# Enable warnings-as-errors specifically for your cpp_refresh target
 if(MSVC)
-    target_compile_options(interview_prep PRIVATE "/WX")
+    target_compile_options(cpp_refresh PRIVATE "/WX")
 else() # Assuming GCC/Clang or compatible
-    target_compile_options(interview_prep PRIVATE "-Werror")
+    target_compile_options(cpp_refresh PRIVATE "-Werror")
 endif()
 
 set(CMAKE_BUILD_TYPE "Debug")
 
 # compile with coverage options
-# target_compile_options(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
-# target_link_libraries(interview_prep PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+# target_compile_options(cpp_refresh PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+# target_link_libraries(cpp_refresh PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 
-target_compile_features(interview_prep PRIVATE cxx_std_17)
+target_compile_features(cpp_refresh PRIVATE cxx_std_17)
 
 if (ENABLE_ASAN)
     # GCC and Clang (Linux/macOS)
@@ -60,5 +60,5 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
-catch_discover_tests(interview_prep)
+catch_discover_tests(cpp_refresh)
 enable_testing()
