@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <mutex>
 
 #include <unique_buffer.h>
 
@@ -14,6 +15,7 @@ public:
           m_end(m_buffer.data() + total_size) {}
 
     void* allocate(size_t object_size, size_t object_alignment) {
+        std::scoped_lock lock(m_mutex);
         uintptr_t current_addr = reinterpret_cast<uintptr_t>(m_current);
         // power of 2 alignment - sourced from Gemini Pro
         uintptr_t aligned_addr = (current_addr + object_alignment - 1) & ~(object_alignment - 1);
@@ -37,4 +39,5 @@ private:
     std::byte* m_current;
     std::byte* const m_start; // Pointer to the beginning of the buffer
     std::byte* const m_end;   // Pointer to one-past-the-end of the buffer
+    std::mutex m_mutex;
 };
