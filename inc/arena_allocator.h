@@ -6,13 +6,15 @@
 
 #include <unique_buffer.h>
 
-class ArenaAllocator {
+class ArenaAllocator
+{
 public:
-    ArenaAllocator(size_t total_size) 
+    ArenaAllocator(size_t total_size)
         : m_buffer(total_size),
+          m_offset(0),
           m_current(m_buffer.data()),
-          m_start(m_buffer.data()),
-          m_end(m_buffer.data() + total_size) {}
+          m_start(reinterpret_cast<uintptr_t>(m_buffer.data())),
+          m_end(reinterpret_cast<uintptr_t>(m_buffer.data() + total_size)) {}
 
     void* allocate(size_t object_size, size_t object_alignment) {
         std::scoped_lock lock(m_mutex);
@@ -21,7 +23,7 @@ public:
         uintptr_t aligned_addr = (current_addr + object_alignment - 1) & ~(object_alignment - 1);
 
         // bounds check - ensure the requested address won't allocate beyond our unique buffer
-        if (aligned_addr + object_size > reinterpret_cast<uintptr_t>(m_end)) {
+        if (aligned_addr + object_size > m_end) {
             return nullptr;
         }
 
@@ -30,14 +32,35 @@ public:
         return reinterpret_cast<std::byte*>(aligned_addr);;
     }
 
+    // void *allocate(size_t object_size, size_t object_alignment) {
+    //     uintptr_t current_known_offset = m_offset.load(std::memory_order_relaxed);
+    //     uintptr_t current_addr = m_start + current_known_offset;
+    //     uintptr_t aligned_addr = (current_addr + object_alignment - 1) & ~(object_alignment - 1);
+    //     // bounds check - ensure the requested address won't allocate beyond our unique buffer
+    //     if (aligned_addr + object_size < m_end) {
+    //         uintptr_t new_offset = (aligned_addr + object_size) - m_start;
+
+    //         while (!m_offset.compare_exchange_weak(current_known_offset, new_offset))
+    //             ;
+            
+    //         return reinterpret_cast<std::byte *>(aligned_addr);
+    //     }
+    //     else {
+    //         return nullptr;
+    //     }
+    // }
+
     void reset() {
-        m_current = m_start;
+        // todo: fix
+        // m_offset.store(0);
+        m_current = reinterpret_cast<std::byte *>(m_start);
     }
 
 private:
     UniqueBuffer<std::byte> m_buffer;
-    std::byte* m_current;
-    std::byte* const m_start; // Pointer to the beginning of the buffer
-    std::byte* const m_end;   // Pointer to one-past-the-end of the buffer
+    std::atomic<uintptr_t> m_offset;
+    std::byte *m_current;
+    uintptr_t const m_start; // Pointer to the beginning of the buffer
+    uintptr_t const m_end;   // Pointer to one-past-the-end of the buffer
     std::mutex m_mutex;
 };
