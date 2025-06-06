@@ -60,7 +60,7 @@ class JobQueue {
         next_position = 0;
       }
 
-      while (!position_to_advance.compare_exchange_weak(current_offset, next_position)) {
+      while (!position_to_advance.compare_exchange_strong(current_offset, next_position, std::memory_order_release)) {
         current_offset = position_to_advance.load();
         next_position = current_offset + 1;
 
@@ -73,19 +73,48 @@ class JobQueue {
       return true;
     }
 
+    bool try_update_count(std::atomic<size_t>& count_to_update, int update_value, const size_t& boundary_value)
+    {
+      size_t current_count = count_to_update.load();
+      size_t next_count = current_count + update_value;
 
+      if (next_count == boundary_value) {
+        return false;
+      }
+
+      while(!count_to_update.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
+        size_t current_count = count_to_update.load();
+        size_t next_count = current_count + update_value;
+
+        if (next_count == boundary_value) {
+          return false;
+        }
+      }
+      
+      return true;
+    }
 
   public:
     bool push(T item) 
     {
-      if (m_count == m_capacity) {
+      size_t current_count = m_count.load();
+      if (current_count == m_capacity) {
         return false;
       }
+
+      size_t next_count = current_count + 1;
 
       size_t write_index;
       if (try_claim_entry(m_write, m_read, write_index)) {
         m_entries[write_index] = std::move(T(item));
-        m_count++;
+        while (!m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
+          current_count = m_count.load();
+          if (current_count == m_capacity) {
+            // queue was filled in the meantime
+            return false;
+          }
+          next_count = current_count + 1;
+        }
         return true;
       }
 
@@ -93,14 +122,24 @@ class JobQueue {
     }
 
     bool pop(T& item) {
-      if (m_count == 0) {
+      size_t current_count = m_count.load();
+      if (current_count == 0) {
         return false;
       }
       
+      size_t next_count = current_count - 1;
+
       size_t read_index;
       if (try_claim_entry(m_read, m_write, read_index)) {
         item = std::move(m_entries[read_index]);
-        m_count--;
+        while (!m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
+          current_count = m_count.load();
+          if (current_count == 0) {
+            // the work was lost? this seems invalid...
+            return false;
+          }
+          next_count = current_count - 1;
+        }
         return true;
       }
 
@@ -108,14 +147,24 @@ class JobQueue {
     }
 
     bool steal(JobQueue<T>& queue, T& item) {
-      if (queue.m_count == 0) {
+      size_t current_count = queue.m_count.load();
+      if (current_count == 0) {
         return false;
       }
 
+      size_t next_count = current_count - 1;
+
       size_t read_index;
-      if (try_claim_entry(queue.m_read, m_write, read_index)) {
+      if (try_claim_entry(queue.m_read, queue.m_write, read_index)) {
         item = std::move(queue.m_entries[read_index]);
-        queue.m_count--;
+        while (!queue.m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
+          current_count = queue.m_count.load();
+          if (current_count == 0) {
+            // the work was lost? this seems invalid...
+            return false;
+          }
+          next_count = current_count - 1;
+        }
         return true;
       }
 
