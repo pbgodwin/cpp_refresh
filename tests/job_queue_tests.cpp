@@ -28,7 +28,7 @@ bool spin_until(Pred pred, std::chrono::milliseconds max = std::chrono::millisec
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Empty / full edge cases
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("Empty queue pop fails, full queue push fails")
+TEST_CASE("JobQueue: Empty queue pop fails, full queue push fails")
 {
     constexpr std::size_t CAP = 4;
     JobQueue<Task> q{CAP};
@@ -49,7 +49,7 @@ TEST_CASE("Empty queue pop fails, full queue push fails")
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Wrap-around sanity with tiny capacity
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("Ring wrap-around works for capacity=2")
+TEST_CASE("JobQueue: Ring wrap-around works for capacity=2")
 {
     JobQueue<Task> q{2};
     Task out;
@@ -69,7 +69,7 @@ TEST_CASE("Ring wrap-around works for capacity=2")
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Single-producer single-consumer stress
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("SPSC 1M ops survives")
+TEST_CASE("JobQueue: SPSC 1M ops survives")
 {
     constexpr std::size_t CAP = 512;
     constexpr std::size_t N   = 1'000'000;
@@ -98,7 +98,7 @@ TEST_CASE("SPSC 1M ops survives")
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Multi-producer multi-consumer: uniqueness guarantee
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("MPMC 4x4 preserves uniqueness")
+TEST_CASE("JobQueue: MPMC 4x4 preserves uniqueness")
 {
     constexpr std::size_t CAP = 4096;
     constexpr std::size_t P   = 4;                 // producers
@@ -142,7 +142,7 @@ TEST_CASE("MPMC 4x4 preserves uniqueness")
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Concurrent pop vs steal (victim vs thief) race
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("Pop-while-steal produces no lost or dup tasks")
+TEST_CASE("JobQueue: Pop-while-steal produces no lost or dup tasks")
 {
     constexpr std::size_t CAP = 1024;
     JobQueue<Task> q{CAP};
@@ -169,7 +169,7 @@ TEST_CASE("Pop-while-steal produces no lost or dup tasks")
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. Destructor race: queue dies while threads still poking it
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("Queue destruction after concurrent use is safe")
+TEST_CASE("JobQueue: Queue destruction after concurrent use is safe")
 {
     constexpr std::size_t CAP = 256;
     std::thread t;
@@ -194,7 +194,7 @@ TEST_CASE("Queue destruction after concurrent use is safe")
 // ──────────────────────────────────────────────────────────────────────────────
 // 1. Single-thread sanity: FIFO & uniqueness
 // ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue single-thread push/pop preserves FIFO")
+TEST_CASE("JobQueue: single-thread push/pop preserves FIFO")
 {
     JobQueue<Task> q{TASKS_PER_PRODUCER};
     for (Task t = 0; t < TASKS_PER_PRODUCER; ++t) q.push(t);
@@ -211,7 +211,7 @@ TEST_CASE("JobQueue single-thread push/pop preserves FIFO")
 // ──────────────────────────────────────────────────────────────────────────────
 // 2. Multi-producer / multi-consumer: no duplicates, nothing lost
 // ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue survives N producers + N consumers without loss")
+TEST_CASE("JobQueue: survives N producers + N consumers without loss")
 {
     JobQueue<Task> queues[N_CONSUMERS]{TASKS_PER_PRODUCER * N_PRODUCERS};
 
@@ -255,7 +255,7 @@ TEST_CASE("JobQueue survives N producers + N consumers without loss")
 // ──────────────────────────────────────────────────────────────────────────────
 // 3. Pop-while-steal race: victim pops from head while thief steals from tail
 // ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("Concurrent pop vs steal never duplicates or drops a task")
+TEST_CASE("JobQueue: Concurrent pop vs steal never duplicates or drops a task")
 {
     constexpr std::size_t CAP = 1'024;
     JobQueue<Task> q{CAP};
