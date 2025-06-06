@@ -17,6 +17,7 @@ add_executable(cpp_refresh
   tests/unique_buffer_tests.cpp
   tests/arena_allocator_tests.cpp
   tests/small_vector_tests.cpp
+  tests/job_queue_tests.cpp
   tests/bench_small_vector.cpp
   tests/bench_parallel_sum.cpp
   tests/concurrency_stress_tests.cpp
@@ -31,7 +32,7 @@ else() # Assuming GCC/Clang or compatible
     target_compile_options(cpp_refresh PRIVATE "-Werror")
 endif()
 
-target_compile_features(cpp_refresh PRIVATE cxx_std_17)
+target_compile_features(cpp_refresh PRIVATE cxx_std_20)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
