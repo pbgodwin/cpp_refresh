@@ -73,26 +73,6 @@ class JobQueue {
       return true;
     }
 
-    bool try_update_count(std::atomic<size_t>& count_to_update, int update_value, const size_t& boundary_value)
-    {
-      size_t current_count = count_to_update.load();
-      size_t next_count = current_count + update_value;
-
-      if (next_count == boundary_value) {
-        return false;
-      }
-
-      while(!count_to_update.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
-        size_t current_count = count_to_update.load();
-        size_t next_count = current_count + update_value;
-
-        if (next_count == boundary_value) {
-          return false;
-        }
-      }
-      
-      return true;
-    }
 
   public:
     bool push(T item) 
