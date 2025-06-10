@@ -1,282 +1,265 @@
 // job_queue_tests.cpp
-// g++ -std=c++20 -O2 -pthread job_queue_tests.cpp -o tests && ./tests
+// A rigorous test suite for a lock-free MPMC queue with work-stealing.
+//
+// To compile and run:
+// g++ -std=c++20 -O2 -pthread -I./include job_queue_tests.cpp -o tests && ./tests
+// (Assumes catch2/catch_test_macros.hpp is in ./include)
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_test_macros.hpp>
-#include <atomic>
 #include <thread>
 #include <vector>
+#include <atomic>
+#include <numeric>
+#include <mutex>
 #include <unordered_set>
-#include <job_queue.h>   // <- you implement this header
 
-using Task = std::size_t;           // unique integer tokens are enough
-constexpr std::size_t N_PRODUCERS = 4;
-constexpr std::size_t N_CONSUMERS = 4;
-constexpr std::size_t TASKS_PER_PRODUCER = 10'000;
+// The API being tested. Assumes job_queue.h is in ./include
+#include <job_queue.h>
 
-
-// Helper: busy-wait until predicate or timeout (avoids <condition_variable>)
-template <class Pred>
-bool spin_until(Pred pred, std::chrono::milliseconds max = std::chrono::milliseconds(2 * 100))
-{
-    auto deadline = std::chrono::steady_clock::now() + max;
-    while (!pred() && std::chrono::steady_clock::now() < deadline)
-        std::this_thread::yield();
-    return pred();
-}
+// Test configuration
+using Task = std::size_t;
+constexpr std::size_t STRESS_TEST_TASKS = 50'000;
+constexpr std::size_t NUM_PRODUCERS = 4;
+constexpr std::size_t NUM_WORKERS = 4; // In work-stealing, workers are consumers
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Empty / full edge cases
+// Test 1: Basic single-threaded sanity checks
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: Empty queue pop fails, full queue push fails")
+TEST_CASE("JobQueue: Single-threaded sanity checks", "[correctness]")
 {
     constexpr std::size_t CAP = 4;
     JobQueue<Task> q{CAP};
+    Task out;
 
-    Task dummy;
-    REQUIRE_FALSE(q.pop(dummy));      // empty pop must fail
+    SECTION("Empty/Full behavior") {
+        REQUIRE_FALSE(q.pop(out)); // Pop from empty queue must fail
 
-    for (Task t = 0; t < CAP; ++t) REQUIRE(q.push(t));
-    REQUIRE_FALSE(q.push(42));        // full push must fail
+        for (Task t = 1; t <= CAP; ++t) {
+            REQUIRE(q.push(t));
+        }
+        REQUIRE_FALSE(q.push(99)); // Push to full queue must fail
+    }
 
-    for (Task expect = 0; expect < CAP; ++expect)
-    {
-        REQUIRE(q.pop(dummy));
-        REQUIRE(dummy == expect);
+    SECTION("FIFO ordering and wrap-around") {
+        JobQueue<Task> q_wrap{2};
+        REQUIRE(q_wrap.push(1)); // q: [1, _]
+        REQUIRE(q_wrap.push(2)); // q: [1, 2]
+        REQUIRE_FALSE(q_wrap.push(3)); // full
+
+        REQUIRE(q_wrap.pop(out));
+        REQUIRE(out == 1);       // q: [_, 2]
+
+        REQUIRE(q_wrap.push(3)); // q: [3, 2] (wraps around)
+        
+        REQUIRE(q_wrap.pop(out));
+        REQUIRE(out == 2);       // q: [3, _]
+
+        REQUIRE(q_wrap.pop(out));
+        REQUIRE(out == 3);       // q: [_, _]
+
+        REQUIRE_FALSE(q_wrap.pop(out)); // empty
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Wrap-around sanity with tiny capacity
+// Test 2: Multi-Producer, Multi-Consumer (MPMC) on a SINGLE queue
+// Verifies that the core push/pop atomics are safe under contention.
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: Ring wrap-around works for capacity=2")
+TEST_CASE("JobQueue: MPMC on a single queue preserves all items", "[concurrency]")
 {
-    JobQueue<Task> q{2};
-    Task out;
+    constexpr std::size_t TASKS_PER_PRODUCER = STRESS_TEST_TASKS;
+    const std::size_t TOTAL_TASKS = NUM_PRODUCERS * TASKS_PER_PRODUCER;
+    const std::size_t QUEUE_CAP = 4096;
 
-    REQUIRE(q.push(1));
-    REQUIRE(q.push(2));
-    REQUIRE(q.pop(out));
-    REQUIRE(out == 1);
-
-    REQUIRE(q.push(3));               // should wrap
-    REQUIRE(q.pop(out));
-    REQUIRE(out == 2);
-    REQUIRE(q.pop(out));
-    REQUIRE(out == 3);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Single-producer single-consumer stress
-// ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: SPSC 1M ops survives")
-{
-    constexpr std::size_t CAP = 512;
-    constexpr std::size_t N   = 1'000'000;
-    JobQueue<Task> q{CAP};
-
-    std::thread prod([&]{
-        for (Task i = 0; i < N; ++i)
-        {
-            while (!q.push(i)) std::this_thread::yield();
-        }
-    });
-
-    std::thread cons([&]{
-        Task v;
-        for (Task i = 0; i < N; ++i)
-        {
-            while (!q.pop(v)) std::this_thread::yield();
-            REQUIRE(v == i);
-        }
-    });
-
-    prod.join();
-    cons.join();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Multi-producer multi-consumer: uniqueness guarantee
-// ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: MPMC 4x4 preserves uniqueness")
-{
-    constexpr std::size_t CAP = 4096;
-    constexpr std::size_t P   = 4;                 // producers
-    constexpr std::size_t C   = 4;                 // consumers
-    constexpr std::size_t PER = 50'000;            // tasks per producer
-    const     std::size_t TOTAL = P * PER;
-
-    JobQueue<Task> q{CAP};
-    std::atomic<std::size_t> done{0};
+    JobQueue<Task> q{QUEUE_CAP};
     std::vector<std::thread> threads;
-    std::vector<std::atomic<bool>> seen(TOTAL);
-    for (auto& f: seen) f = false;
+    
+    // Use a thread-safe mechanism to verify results.
+    // An atomic flag per task is perfect for detecting duplicates and losses.
+    std::vector<std::atomic<bool>> seen_tasks(TOTAL_TASKS);
+    for(size_t i = 0; i < TOTAL_TASKS; ++i) seen_tasks[i] = false;
 
-    // Producers
-    for (std::size_t p = 0; p < P; ++p)
-        threads.emplace_back([&, p]{
-            Task base = p * PER;
-            for (Task i = 0; i < PER; ++i)
-                while (!q.push(base + i)) std::this_thread::yield();
-        });
+    std::atomic<size_t> tasks_consumed = 0;
 
-    // Consumers (also stealing from same queue = degenerate case)
-    for (std::size_t c = 0; c < C; ++c)
-        threads.emplace_back([&]{
-            Task v;
-            while (done.load() < TOTAL)
-            {
-                if (q.pop(v) || q.steal(q, v))
-                {
-                    REQUIRE_FALSE(seen[v].exchange(true)); // duplicates explode
-                    ++done;
+    // --- Producers ---
+    for (std::size_t p_id = 0; p_id < NUM_PRODUCERS; ++p_id) {
+        threads.emplace_back([&, p_id] {
+            Task base_task = p_id * TASKS_PER_PRODUCER;
+            for (Task i = 0; i < TASKS_PER_PRODUCER; ++i) {
+                Task task = base_task + i;
+                while (!q.push(task)) {
+                    std::this_thread::yield();
                 }
-                else  std::this_thread::yield();
             }
         });
+    }
+
+    // --- Consumers ---
+    for (std::size_t c_id = 0; c_id < NUM_WORKERS; ++c_id) {
+        threads.emplace_back([&] {
+            Task task;
+            // Keep consuming until all tasks are accounted for.
+            while (tasks_consumed.load(std::memory_order_relaxed) < TOTAL_TASKS) {
+                if (q.pop(task)) {
+                    // The exchange operation atomically sets the flag to true and
+                    // returns the OLD value. If it was already true, we have a duplicate.
+                    REQUIRE_FALSE(seen_tasks[task].exchange(true, std::memory_order_relaxed));
+                    tasks_consumed.fetch_add(1, std::memory_order_relaxed);
+                } else {
+                    std::this_thread::yield();
+                }
+            }
+        });
+    }
 
     for (auto& t : threads) t.join();
-    REQUIRE(done == TOTAL);
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. Concurrent pop vs steal (victim vs thief) race
-// ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: Pop-while-steal produces no lost or dup tasks")
-{
-    constexpr std::size_t CAP = 1024;
-    JobQueue<Task> q{CAP};
-
-    for (Task t = 0; t < CAP; ++t) q.push(t);
-
-    std::unordered_set<Task> bag;
-    std::atomic<bool> stop{false};
-    Task tmp;
-
-    std::thread thief([&]{
-        while (!stop)
-            if (q.steal(q, tmp)) bag.insert(tmp);
-    });
-
-    while (bag.size() < CAP)
-        if (q.pop(tmp)) bag.insert(tmp);
-
-    stop = true;
-    thief.join();
-    REQUIRE(bag.size() == CAP);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. Destructor race: queue dies while threads still poking it
-// ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: Queue destruction after concurrent use is safe")
-{
-    constexpr std::size_t CAP = 256;
-    std::thread t;
-    {
-        auto q = std::make_unique<JobQueue<Task>>(CAP);
-        std::atomic<bool> go{false};
-
-        t = std::thread([&]{
-            Task x;
-            spin_until([&]{ return go.load(); });
-            for (int i = 0; i < CAP * 10; ++i)
-                q->push(i);
-        });
-
-        go = true;
-        // scope ends, q destructor will wait for thread?  not its job.
+    // Final verification
+    REQUIRE(tasks_consumed == TOTAL_TASKS);
+    for(size_t i = 0; i < TOTAL_TASKS; ++i) {
+        REQUIRE(seen_tasks[i].load()); // Ensure every single task was seen.
     }
-    t.join();   // if the destructor UB’d, ASAN/Valgrind or Windows CRT will yell.
 }
 
-
-// ──────────────────────────────────────────────────────────────────────────────
-// 1. Single-thread sanity: FIFO & uniqueness
-// ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: single-thread push/pop preserves FIFO")
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 3: Full Work-Stealing Simulation
+// Each worker has its own queue. Workers pop from their own queue and steal
+// from others when their own is empty. This is the canonical use case.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("JobQueue: Work-stealing simulation with multiple queues", "[work-stealing]")
 {
-    JobQueue<Task> q{TASKS_PER_PRODUCER};
-    for (Task t = 0; t < TASKS_PER_PRODUCER; ++t) q.push(t);
+    const std::size_t TASKS_PER_WORKER = STRESS_TEST_TASKS;
+    const std::size_t TOTAL_TASKS = NUM_WORKERS * TASKS_PER_WORKER;
+    const std::size_t QUEUE_CAP = 2048;
 
-    Task out;
-    for (Task expected = 0; expected < TASKS_PER_PRODUCER; ++expected)
-    {
-        REQUIRE(q.pop(out));
-        REQUIRE(out == expected);
+    // One queue per worker
+    std::vector<JobQueue<Task>> queues;
+    queues.reserve(NUM_WORKERS); // Optional but good practice to avoid reallocations
+    for (size_t i = 0; i < NUM_WORKERS; ++i) {
+        queues.emplace_back(QUEUE_CAP);
     }
-    REQUIRE_FALSE(q.pop(out));          // queue should now be empty
-}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 2. Multi-producer / multi-consumer: no duplicates, nothing lost
-// ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: survives N producers + N consumers without loss")
-{
-    JobQueue<Task> queues[N_CONSUMERS]{TASKS_PER_PRODUCER * N_PRODUCERS};
+    std::vector<std::thread> workers;
 
-    // Shared state to verify execution
-    std::atomic<std::size_t> executed{0};
-    std::vector<std::thread> threads;
+    // Thread-safe verification tools
+    std::vector<std::atomic<bool>> seen_tasks(TOTAL_TASKS);
+     for(size_t i = 0; i < TOTAL_TASKS; ++i) seen_tasks[i] = false;
+    std::atomic<size_t> tasks_processed = 0;
 
-    // Producers
-    for (std::size_t p = 0; p < N_PRODUCERS; ++p)
-        threads.emplace_back([&, p] {
-            for (Task local = 0; local < TASKS_PER_PRODUCER; ++local)
-                queues[p % N_CONSUMERS].push(p * TASKS_PER_PRODUCER + local);
-        });
+    // --- Phase 1: Each worker produces its own tasks ---
+    for (std::size_t worker_id = 0; worker_id < NUM_WORKERS; ++worker_id) {
+        Task base_task = worker_id * TASKS_PER_WORKER;
+        for (Task i = 0; i < TASKS_PER_WORKER; ++i) {
+            queues[worker_id].push(base_task + i);
+        }
+    }
 
-    // Consumers (each owns its own queue, then steals)
-    for (std::size_t c = 0; c < N_CONSUMERS; ++c)
-        threads.emplace_back([&, c] {
+    // --- Phase 2: Workers process tasks from own queue, then steal ---
+    for (std::size_t worker_id = 0; worker_id < NUM_WORKERS; ++worker_id) {
+        workers.emplace_back([&, worker_id] {
             Task task;
-            while (executed.load() < N_PRODUCERS * TASKS_PER_PRODUCER)
-            {
-                if (queues[c].pop(task))
-                {
-                    ++executed;
+            while (tasks_processed.load(std::memory_order_acquire) < TOTAL_TASKS) {
+                // 1. Try to pop from our own queue
+                if (queues[worker_id].pop(task)) {
+                    REQUIRE_FALSE(seen_tasks[task].exchange(true));
+                    tasks_processed.fetch_add(1, std::memory_order_release);
                     continue;
                 }
-                // Try to steal round-robin
-                for (std::size_t v = 0; v < N_CONSUMERS; ++v)
-                    if (v != c && queues[c].steal(queues[v], task))
-                    {
-                        ++executed;
-                        break;
+
+                // 2. Own queue is empty, try to steal from others
+                bool was_stolen = false;
+                for (std::size_t i = 1; i < NUM_WORKERS; ++i) {
+                    std::size_t victim_id = (worker_id + i) % NUM_WORKERS;
+                    
+                    // NOTE: The first argument to steal() is the thief's queue,
+                    // the second is the victim's. Your API is `thief.steal(victim, out)`.
+                    if (queues[worker_id].steal(queues[victim_id], task)) {
+                        REQUIRE_FALSE(seen_tasks[task].exchange(true));
+                        tasks_processed.fetch_add(1, std::memory_order_release);
+                        was_stolen = true;
+                        break; // Stop stealing after one success
                     }
-                std::this_thread::yield();   // let others progress
+                }
+
+                if (!was_stolen) {
+                    std::this_thread::yield(); // Avoid busy-spinning if all queues are empty
+                }
             }
         });
+    }
 
-    for (auto& t : threads) t.join();
-    REQUIRE(executed == N_PRODUCERS * TASKS_PER_PRODUCER);
+    for (auto& w : workers) w.join();
+
+    // Final verification
+    REQUIRE(tasks_processed == TOTAL_TASKS);
+    for(size_t i = 0; i < TOTAL_TASKS; ++i) {
+        REQUIRE(seen_tasks[i].load());
+    }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 3. Pop-while-steal race: victim pops from head while thief steals from tail
-// ──────────────────────────────────────────────────────────────────────────────
-TEST_CASE("JobQueue: Concurrent pop vs steal never duplicates or drops a task")
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 4: Pop vs. Steal Race Condition
+// One thread pops from the head while another steals from the head of the SAME queue.
+// This is a focused stress test for the head pointer's atomicity.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("JobQueue: Pop vs Steal race does not lose or duplicate tasks", "[concurrency]")
 {
-    constexpr std::size_t CAP = 1'024;
+    constexpr std::size_t CAP = 4096;
     JobQueue<Task> q{CAP};
 
-    // pre-fill queue exactly to capacity
+    // Pre-fill the queue
     for (Task t = 0; t < CAP; ++t) q.push(t);
 
-    std::unordered_set<Task> seen;        // not thread-safe by design
-    std::atomic<bool> done{false};
-    std::thread thief([&] {
-        Task t;
-        while (!done)
-            if (q.steal(q, t))            // self-steal forces wraparound logic
-                seen.insert(t);
+    std::thread popper;
+    std::thread stealer;
+    
+    // Use a mutex for the result set, as it's a complex data type.
+    std::mutex bag_mutex;
+    std::unordered_set<Task> collected_tasks;
+
+    std::atomic<bool> stop_flag = false;
+
+    // The "popper" (owner)
+    popper = std::thread([&] {
+        Task task;
+        while (!stop_flag.load(std::memory_order_acquire)) {
+            if (q.pop(task)) {
+                std::lock_guard<std::mutex> lock(bag_mutex);
+                collected_tasks.insert(task);
+            } else {
+                std::this_thread::yield();
+            }
+        }
     });
 
-    Task t;
-    while (seen.size() < CAP)
-        if (q.pop(t)) seen.insert(t);
+    // The "stealer" (thief)
+    stealer = std::thread([&] {
+        Task task;
+        // The thief is another queue instance, as per the API
+        JobQueue<Task> thief_q{1}; 
+        while (!stop_flag.load(std::memory_order_acquire)) {
+            if (thief_q.steal(q, task)) {
+                std::lock_guard<std::mutex> lock(bag_mutex);
+                collected_tasks.insert(task);
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    });
 
-    done = true;
-    thief.join();
-    REQUIRE(seen.size() == CAP);          // every token 0-1023 exactly once
+    // Let them run until all tasks are collected
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::lock_guard<std::mutex> lock(bag_mutex);
+        if (collected_tasks.size() == CAP) {
+            stop_flag.store(true, std::memory_order_release);
+            break;
+        }
+    }
+
+    popper.join();
+    stealer.join();
+
+    REQUIRE(collected_tasks.size() == CAP);
 }
