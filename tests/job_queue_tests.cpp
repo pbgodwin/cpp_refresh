@@ -104,7 +104,8 @@ TEST_CASE("JobQueue: MPMC on a single queue preserves all items", "[concurrency]
                 if (q.pop(task)) {
                     // The exchange operation atomically sets the flag to true and
                     // returns the OLD value. If it was already true, we have a duplicate.
-                    REQUIRE_FALSE(seen_tasks[task].exchange(true, std::memory_order_relaxed));
+                    auto seen = seen_tasks[task].exchange(true, std::memory_order_relaxed);
+                    REQUIRE_FALSE(seen);
                     tasks_consumed.fetch_add(1, std::memory_order_relaxed);
                 } else {
                     std::this_thread::yield();

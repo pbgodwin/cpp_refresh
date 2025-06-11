@@ -28,127 +28,107 @@ template <typename T>
 class JobQueue {
   public:
     JobQueue<T>() : 
-        m_capacity(0), m_entries(m_capacity), 
-        m_read(0), m_write(0), m_count(0)
+        m_capacity(0), m_entries(0),
+        m_read(0), m_write(0)
         {}
 
     JobQueue<T>(const size_t capacity) : 
           m_capacity(capacity), m_entries(capacity),
-          m_read(0), m_write(0), m_count(0)
+          m_read(0), m_write(0)
         {
-
         }
     
+    JobQueue<T>(JobQueue<T>&& src)
+      : m_entries(std::move(src.m_entries)),
+        m_capacity(src.m_capacity),
+        m_read(src.m_read.load(std::memory_order_relaxed)),
+        m_write(src.m_write.load(std::memory_order_relaxed)) {
+        // mark the moved from object as empty but valid
+        src.m_capacity = 0;
+    }
+
+    JobQueue<T>& operator=(JobQueue<T>&& src) {
+      if (this != &src) {
+        m_entries = std::move(src.m_entries);
+        m_capacity = src.m_capacity;
+        m_read = src.m_read.load(std::memory_order_relaxed);
+        m_write = src.m_write.load(std::memory_order_relaxed);
+        src.m_capacity = 0;
+      }
+      return *this;
+    }
+
     JobQueue<T> operator=(const JobQueue<T>& copy) = delete;
     JobQueue<T>(const JobQueue<T>& copy) = delete;
     
   private:
+    alignas(std::hardware_destructive_interference_size) std::atomic<size_t> m_write;
+    alignas(std::hardware_destructive_interference_size) std::atomic<size_t> m_read;
+
     UniqueBuffer<T> m_entries;
-    const size_t m_capacity; // 4
-    std::atomic<size_t> m_count;
-    std::atomic<size_t> m_read; // 0
-    std::atomic<size_t> m_write; // 0 
-
-    bool try_claim_entry(std::atomic<size_t>& position_to_advance, 
-                        const std::atomic<size_t>& boundary_to_check,
-                        size_t& claimed_position)
-    {
-      size_t current_offset = position_to_advance.load();
-      size_t next_position = current_offset + 1;
-
-      if (next_position == m_capacity) {
-        next_position = 0;
-      }
-
-      while (!position_to_advance.compare_exchange_strong(current_offset, next_position, std::memory_order_release)) {
-        current_offset = position_to_advance.load();
-        next_position = current_offset + 1;
-
-        if (next_position == m_capacity) {
-          next_position = 0;
-        }
-      }
-
-      claimed_position = current_offset;
-      return true;
-    }
-
+    size_t m_capacity;
 
   public:
     bool push(T item) 
     {
-      size_t current_count = m_count.load();
-      if (current_count == m_capacity) {
-        return false;
-      }
+      size_t tail, head;
+      while (true)
+      {
+          tail = m_write.load(std::memory_order_relaxed);
+          head = m_read.load(std::memory_order_acquire);            // pairs with pop
 
-      size_t next_count = current_count + 1;
+          if (tail - head >= m_capacity) return false;               // full
 
-      size_t write_index;
-      if (try_claim_entry(m_write, m_read, write_index)) {
-        m_entries[write_index] = std::move(T(item));
-        while (!m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
-          current_count = m_count.load();
-          if (current_count == m_capacity) {
-            // queue was filled in the meantime
-            return false;
+          m_entries[tail % m_capacity] = item;                // fill
+
+          if (m_write.compare_exchange_weak(tail, tail + 1,
+                                            std::memory_order_release,
+                                            std::memory_order_relaxed))
+          {
+            return true;
           }
-          next_count = current_count + 1;
-        }
-        return true;
       }
-
-      return false;
     }
 
-    bool pop(T& item) {
-      size_t current_count = m_count.load();
-      if (current_count == 0) {
-        return false;
-      }
-      
-      size_t next_count = current_count - 1;
+    bool pop(T& out) {
+      size_t head, tail;
+      while (true)
+      {
+          head = m_read.load(std::memory_order_relaxed);
+          tail = m_write.load(std::memory_order_acquire);            // pairs with push
 
-      size_t read_index;
-      if (try_claim_entry(m_read, m_write, read_index)) {
-        item = std::move(m_entries[read_index]);
-        while (!m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
-          current_count = m_count.load();
-          if (current_count == 0) {
-            // the work was lost? this seems invalid...
-            return false;
+          if (tail == head) return false;                            // empty
+
+          if (m_read.compare_exchange_weak(head, head + 1,
+                                          std::memory_order_release,
+                                          std::memory_order_relaxed))
+          {
+              out = std::move(m_entries[head % m_capacity]);
+              return true;
+              break;                                                 // claimed slot
           }
-          next_count = current_count - 1;
-        }
-        return true;
       }
 
-      return false;
     }
 
-    bool steal(JobQueue<T>& queue, T& item) {
-      size_t current_count = queue.m_count.load();
-      if (current_count == 0) {
-        return false;
-      }
+    bool steal(JobQueue<T>& victim, T& out) {
+      size_t head, tail;
+      while (true)
+      {
+          head = victim.m_read.load(std::memory_order_relaxed);
+          tail = victim.m_write.load(std::memory_order_acquire);            // pairs with push
 
-      size_t next_count = current_count - 1;
+          if (tail == head) return false;                            // empty
 
-      size_t read_index;
-      if (try_claim_entry(queue.m_read, queue.m_write, read_index)) {
-        item = std::move(queue.m_entries[read_index]);
-        while (!queue.m_count.compare_exchange_strong(current_count, next_count, std::memory_order_acquire)) {
-          current_count = queue.m_count.load();
-          if (current_count == 0) {
-            // the work was lost? this seems invalid...
-            return false;
+          if (victim.m_write.compare_exchange_weak(tail, tail - 1,
+                                          std::memory_order_release,
+                                          std::memory_order_relaxed))
+          {
+              out = std::move(victim.m_entries[tail % victim.m_capacity]);
+              return true;
+              break;                                                 // claimed slot
           }
-          next_count = current_count - 1;
-        }
-        return true;
       }
-
-      return false;
     }
 
 };
