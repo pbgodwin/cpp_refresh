@@ -55,8 +55,6 @@ class SmallVector {
             m_size = src.m_size;
             m_capacity = src.m_capacity;
             m_on_stack = src.m_on_stack;
-
-            src.~SmallVector();
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
@@ -70,6 +68,7 @@ class SmallVector {
                 std::move(src.begin(), src.end(), m_storage.stack);
             } else {
                 m_storage.heap_data_ptr = std::move(src.m_storage.heap_data_ptr);
+                delete[] reinterpret_cast<std::byte*>(src.m_storage.heap_data_ptr);
             }
 
             m_size = src.m_size;
@@ -90,10 +89,6 @@ class SmallVector {
                 }
             }
 
-            for (const T* it = copy.begin(); it != copy.end(); ++it) {
-                it->~T();
-            }
-
             m_size = copy.m_size;
             m_capacity = copy.m_capacity;
             m_on_stack = copy.m_on_stack;
@@ -103,6 +98,11 @@ class SmallVector {
             for (const T* it = begin(); it != end(); ++it) {
                 it->~T();
             }
+
+            if (!m_on_stack) {
+                delete[] reinterpret_cast<std::byte*>(m_storage.heap_data_ptr);
+            }
+
             m_storage.heap_data_ptr = nullptr;
             m_size = 0;
             m_capacity = N;
@@ -125,10 +125,6 @@ class SmallVector {
                 for (int i = 0; i < copy.m_size; i++) {
                     new (m_storage.heap_data_ptr + i) T(copy[i]);
                 }
-            }
-
-            for (const T* it = copy.begin(); it != copy.end(); ++it) {
-                it->~T();
             }
 
             m_size = copy.m_size;
@@ -227,7 +223,7 @@ class SmallVector {
                     // finally, place the element
                     new (new_heap_buffer + m_size) T(element);
 
-                    // Update internal state
+                    // Update internal state 
                     m_storage.heap_data_ptr = new_heap_buffer;
                     m_on_stack = false;
                     m_capacity = new_capacity;
@@ -244,13 +240,14 @@ class SmallVector {
                     // 2. Move elements from the stack to the new heap buffer
                     for (size_t i = 0; i < m_size; ++i) {
                         new (new_heap_buffer + i) T(std::move_if_noexcept(m_storage.heap_data_ptr[i]));
-                        (m_storage.stack + i)->~T();
+                        (m_storage.heap_data_ptr + i)->~T();
                     }
                     
                     // finally, place the element
                     new (new_heap_buffer + m_size) T(element);
 
                     // Update internal state
+                    delete[] reinterpret_cast<std::byte*>(m_storage.heap_data_ptr);
                     m_storage.heap_data_ptr = new_heap_buffer;
                     m_on_stack = false;
                     m_capacity = new_capacity;
