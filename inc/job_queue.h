@@ -120,11 +120,11 @@ class JobQueue {
 
           if (tail == head) return false;                            // empty
 
-          if (victim.m_write.compare_exchange_weak(tail, tail - 1,
+          if (victim.m_read.compare_exchange_weak(head, head + 1,
                                           std::memory_order_release,
                                           std::memory_order_relaxed))
           {
-              out = std::move(victim.m_entries[tail % victim.m_capacity]);
+              out = std::move(victim.m_entries[head % victim.m_capacity]);
               return true;
               break;                                                 // claimed slot
           }
