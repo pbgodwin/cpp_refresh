@@ -25,8 +25,6 @@ class SmallVector {
             } else {
                 m_storage.heap_data_ptr = new T[m_capacity] { default_value };
             }
-            
-            default_value.~T();
         }
 
         SmallVector<T, N>(std::initializer_list<T> init) : 
@@ -46,7 +44,6 @@ class SmallVector {
                 new (to_modify + i) T(v);
                 ++i;
             }
-
         }
 
         SmallVector<T, N>(SmallVector<T,N>&& src) noexcept {
