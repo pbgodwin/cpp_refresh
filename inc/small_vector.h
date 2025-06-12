@@ -33,28 +33,38 @@ class SmallVector {
                         m_size(init.size()), 
                         m_capacity(m_size > N ? m_size : N),
                         m_on_stack(m_size <= N) {
+            T* to_modify;
             if (m_on_stack) {
-                std::copy(init.begin(), init.end(), m_storage.stack);
+                to_modify = m_storage.stack;
             } else {
-                m_storage.heap_data_ptr = new T[m_capacity];
-                std::copy(init.begin(), init.end(), m_storage.heap_data_ptr);
+                m_storage.heap_data_ptr = reinterpret_cast<T*>(new std::byte[m_capacity * sizeof(T)]);
+                to_modify = m_storage.heap_data_ptr;
             }
 
-            for (const T& og : init) {
-                og.~T();
+            int i = 0;
+            for (auto v : init) {
+                new (to_modify + i) T(v);
+                ++i;
             }
+
         }
 
         SmallVector<T, N>(SmallVector<T,N>&& src) noexcept {
             if (src.m_on_stack) {
-                std::move(src.begin(), src.end(), m_storage.stack);
+                for (size_t i = 0; i < src.m_size; ++i) {
+                    new (m_storage.stack + i) T(std::move(src.m_storage.stack[i]));
+                }
             } else {
-                m_storage.heap_data_ptr = std::move(src.m_storage.heap_data_ptr);
+                m_storage.heap_data_ptr = reinterpret_cast<T*>(new std::byte[src.m_capacity * sizeof(T)]);
+                std::swap(m_storage.heap_data_ptr, src.m_storage.heap_data_ptr);
             }
 
             m_size = src.m_size;
             m_capacity = src.m_capacity;
             m_on_stack = src.m_on_stack;
+
+            src.m_size = 0;
+            src.m_on_stack = true;
         }
 
         SmallVector<T, N>& operator=(SmallVector<T,N>&& src) noexcept {
@@ -65,25 +75,31 @@ class SmallVector {
             }
             
             if (src.m_on_stack) {
-                std::move(src.begin(), src.end(), m_storage.stack);
+                for (size_t i = 0; i < src.m_size; ++i) {
+                    new (m_storage.stack + i) T(std::move(src.m_storage.stack[i]));
+                }
             } else {
-                m_storage.heap_data_ptr = std::move(src.m_storage.heap_data_ptr);
-                delete[] reinterpret_cast<std::byte*>(src.m_storage.heap_data_ptr);
+                m_storage.heap_data_ptr = reinterpret_cast<T*>(new std::byte[src.m_capacity * sizeof(T)]);
+                std::swap(m_storage.heap_data_ptr, src.m_storage.heap_data_ptr);
             }
 
             m_size = src.m_size;
             m_capacity = src.m_capacity;
             m_on_stack = src.m_on_stack;
 
-            src.~SmallVector();
+            src.m_size = 0;
+            src.m_on_stack = true;
+
             return *this;
         }
 
         SmallVector<T, N>(const SmallVector<T, N>& copy) {
             if (copy.m_on_stack) {
-                std::copy(copy.m_storage.stack, (copy.m_storage.stack + copy.m_size), m_storage.stack);
+                for (size_t i = 0; i < copy.m_size; ++i) {
+                    new (m_storage.stack + i) T(copy.m_storage.stack[i]);
+                }
             } else {
-                m_storage.heap_data_ptr = new T[copy.m_capacity];
+                m_storage.heap_data_ptr = reinterpret_cast<T*>(new std::byte[copy.m_capacity * sizeof(T)]);
                 for (int i = 0; i < copy.m_size; i++) {
                     new (m_storage.heap_data_ptr + i) T(copy[i]);
                 }
@@ -118,10 +134,26 @@ class SmallVector {
         }
 
         SmallVector<T, N>& operator=(const SmallVector<T, N>& copy) {
+            if (this == 0) {
+                return *this;
+            }
+
+            if (!empty()) {
+                for (const T* it = begin(); it != end(); ++it) {
+                    it->~T();
+                }
+            }
+
+            if (!m_on_stack) {
+                delete[] reinterpret_cast<std::byte*>(m_storage.heap_data_ptr);
+            }
+
             if (copy.m_on_stack) {
-                std::copy(copy.m_storage.stack, (copy.m_storage.stack + copy.m_size), m_storage.stack);
+                for (size_t i = 0; i < copy.m_size; ++i) {
+                    new (m_storage.stack + i) T(copy.m_storage.stack[i]);
+                }            
             } else {
-                m_storage.heap_data_ptr = new T[copy.m_capacity];
+                m_storage.heap_data_ptr = reinterpret_cast<T*>(new std::byte[copy.m_capacity * sizeof(T)]);
                 for (int i = 0; i < copy.m_size; i++) {
                     new (m_storage.heap_data_ptr + i) T(copy[i]);
                 }
