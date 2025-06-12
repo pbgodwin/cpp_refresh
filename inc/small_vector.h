@@ -231,6 +231,7 @@ class SmallVector {
             return get_element(index); 
         }
 
+        // needed for perfect forwarding
         template<class U = T>
         void push_back(U&& element) {
             if (m_on_stack) {
