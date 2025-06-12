@@ -33,26 +33,27 @@ public:
     }
 
     // void *allocate(size_t object_size, size_t object_alignment) {
-    //     uintptr_t current_known_offset = m_offset.load(std::memory_order_relaxed);
-    //     uintptr_t current_addr = m_start + current_known_offset;
-    //     uintptr_t aligned_addr = (current_addr + object_alignment - 1) & ~(object_alignment - 1);
-    //     // bounds check - ensure the requested address won't allocate beyond our unique buffer
-    //     if (aligned_addr + object_size < m_end) {
-    //         uintptr_t new_offset = (aligned_addr + object_size) - m_start;
+    //     uintptr_t current_offset = m_offset.load(std::memory_order_relaxed);
+    //     uintptr_t current_addr = m_start + current_offset;
+    //     uintptr_t aligned_addr;
 
-    //         while (!m_offset.compare_exchange_weak(current_known_offset, new_offset))
-    //             ;
-            
-    //         return reinterpret_cast<std::byte *>(aligned_addr);
-    //     }
-    //     else {
-    //         return nullptr;
-    //     }
+    //     do {
+    //         aligned_addr = (current_addr + object_alignment - 1) & ~(object_alignment - 1);
+
+    //         // bounds check - ensure the requested address won't allocate beyond our unique buffer
+    //         if (aligned_addr + object_size > m_end) {
+    //             return nullptr;
+    //         }
+    //     } while (!m_offset.compare_exchange_weak(current_offset, current_offset + 1));
+
+    //     // move the arena pointer forward for next alloc & return requested addr
+    //     m_current = reinterpret_cast<std::byte*>(aligned_addr + object_size);
+    //     return reinterpret_cast<std::byte*>(aligned_addr);;
     // }
 
     void reset() {
         // todo: fix
-        // m_offset.store(0);
+        m_offset.store(0);
         m_current = reinterpret_cast<std::byte *>(m_start);
     }
 
